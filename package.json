@@ -6,7 +6,7 @@
   "publisher": "yiyuan",
   "license": "MIT",
   "engines": {
-    "vscode": "^1.90"
+    "vscode": "^1.90.0"
   },
   "categories": [
     "Linters",
