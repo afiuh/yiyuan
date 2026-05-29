@@ -1,0 +1,108 @@
+{
+  "name": "yiyuan",
+  "displayName": "意元 — 代码语义元动作体系",
+  "description": "基于代码语义元动作体系 v1.9 的 AI 辅助编程工具：合规审查、六维度探测、语义蓝图生成",
+  "version": "0.1.0",
+  "publisher": "yiyuan",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90"
+  },
+  "categories": [
+    "Linters",
+    "AI",
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:javascript",
+    "onLanguage:typescript",
+    "onLanguage:javascriptreact",
+    "onLanguage:typescriptreact"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "yiyuan.compliance",
+        "title": "意元：合规审查当前文件"
+      },
+      {
+        "command": "yiyuan.probe",
+        "title": "意元：六维度探测需求"
+      },
+      {
+        "command": "yiyuan.blueprint",
+        "title": "意元：生成语义蓝图"
+      },
+      {
+        "command": "yiyuan.editor",
+        "title": "意元：打开元动作编辑器"
+      },
+      {
+        "command": "yiyuan.compliancePanel",
+        "title": "意元：打开合规审查面板"
+      },
+      {
+        "command": "yiyuan.genTest",
+        "title": "意元：生成测试（基于蓝图）"
+      },
+      {
+        "command": "yiyuan.genCode",
+        "title": "意元：生成代码（基于蓝图）"
+      },
+      {
+        "command": "yiyuan.envCheck",
+        "title": "意元：环境就绪检查"
+      },
+      {
+        "command": "yiyuan.integrate",
+        "title": "意元：集成验证"
+      }
+    ],
+    "configuration": {
+      "title": "意元",
+      "properties": {
+        "yiyuan.deepseekApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "DeepSeek API Key"
+        },
+        "yiyuan.qwenApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "通义千问 API Key"
+        },
+        "yiyuan.glmApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "智谱 GLM API Key"
+        },
+        "yiyuan.defaultModel": {
+          "type": "string",
+          "default": "deepseek-chat",
+          "enum": [
+            "deepseek-chat",
+            "qwen-turbo",
+            "glm-4"
+          ],
+          "description": "默认 LLM 模型"
+        },
+        "yiyuan.reviewStrictness": {
+          "type": "string",
+          "default": "strict",
+          "enum": [
+            "strict",
+            "moderate",
+            "relaxed"
+          ],
+          "description": "合规审查严格度：strict（全部强制配对）/ moderate（I流+R流强制）/ relaxed（仅I14+I16强制）"
+        },
+        "yiyuan.rulesPath": {
+          "type": "string",
+          "default": "",
+          "description": "自定义规则 JSON 文件路径（留空使用内置规则）"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,688 @@
+{
+  "$schema": "./rules.schema.json",
+  "version": "1.9",
+  "description": "代码语义元动作体系 v1.9 — 20种元动作检测规则与强制配对",
+
+  "metaActions": [
+    {
+      "flow": "内存流",
+      "name": "Memory Flow",
+      "description": "处理程序内部数据的声明、存储与运算，特征为高确定性、低延迟",
+      "actions": [
+        {
+          "id": "M1",
+          "name": "声明",
+          "definition": "创建变量、函数、类、模块导入",
+          "risk": "low",
+          "patterns": {
+            "javascript": [
+              "\\b(let|const|var)\\s+\\w+",
+              "\\bclass\\s+\\w+",
+              "\\b(import|require)\\s*[\\(\\{]",
+              "\\bfunction\\s+\\w+\\s*\\("
+            ],
+            "typescript": [
+              "\\b(let|const|var)\\s+\\w+",
+              "\\bclass\\s+\\w+",
+              "\\b(import|require)\\s*[\\(\\{]",
+              "\\bfunction\\s+\\w+\\s*\\(",
+              "\\binterface\\s+\\w+",
+              "\\btype\\s+\\w+\\s*=",
+              "\\benum\\s+\\w+"
+            ]
+          },
+          "forcedPattern": "优先使用 const，慎用 var",
+          "severity": "info"
+        },
+        {
+          "id": "M2",
+          "name": "赋值",
+          "definition": "将值存入已声明的内存变量",
+          "risk": "low",
+          "patterns": {
+            "javascript": [
+              "\\w+\\s*=\\s*(?!==|!=).+",
+              "\\w+\\.\\w+\\s*=\\s*[^=]",
+              "\\w+\\[.+\\]\\s*=\\s*[^=]"
+            ],
+            "typescript": [
+              "\\w+\\s*=\\s*(?!==|!=).+",
+              "\\w+\\.\\w+\\s*=\\s*[^=]",
+              "\\w+\\[.+\\]\\s*=\\s*[^=]"
+            ]
+          },
+          "forcedPattern": "跨作用域传递对象且源对象后续会被修改时，必须显式拷贝",
+          "severity": "info"
+        },
+        {
+          "id": "M3",
+          "name": "内存读取",
+          "definition": "从可信内存变量中取值",
+          "risk": "low",
+          "patterns": {
+            "javascript": [
+              "\\w+\\[\\w+\\]",
+              "\\w+\\.\\w+(?!\\s*=)"
+            ],
+            "typescript": [
+              "\\w+\\[\\w+\\]",
+              "\\w+\\.\\w+(?!\\s*=)"
+            ]
+          },
+          "forcedPattern": "使用可选链 ?. 或空值合并 ??",
+          "severity": "warning"
+        },
+        {
+          "id": "M4",
+          "name": "计算",
+          "definition": "同数据类型内的运算，输出类型与输入类型本质一致",
+          "risk": "low",
+          "patterns": {
+            "javascript": [
+              "\\b[\\w.]+\\s*[+\\-*/%]\\s*",
+              "\\b(Math\\.\\w+|Number\\.\\w+)\\([^)]*\\)",
+              "\\b(string|array)\\.(length|size)\\b",
+              "[!=]=\\s*[^=]",
+              "&&|\\|\\||!\\w|!!"
+            ],
+            "typescript": [
+              "\\b[\\w.]+\\s*[+\\-*/%]\\s*",
+              "\\b(Math\\.\\w+|Number\\.\\w+)\\([^)]*\\)",
+              "\\b(string|array)\\.(length|size)\\b",
+              "[!=]=\\s*[^=]",
+              "&&|\\|\\||!\\w|!!"
+            ]
+          },
+          "forcedPattern": "浮点数计算需 toFixed 或专用库",
+          "severity": "warning"
+        },
+        {
+          "id": "M5",
+          "name": "转换",
+          "definition": "跨数据类型的变换，输出类型与输入类型本质改变",
+          "risk": "medium",
+          "patterns": {
+            "javascript": [
+              "\\bJSON\\.parse\\s*\\(",
+              "\\bJSON\\.stringify\\s*\\(",
+              "\\bNumber\\s*\\(",
+              "\\bString\\s*\\(",
+              "\\bparseInt\\s*\\(",
+              "\\bparseFloat\\s*\\(",
+              "\\.toString\\s*\\(",
+              "\\bBoolean\\s*\\("
+            ],
+            "typescript": [
+              "\\bJSON\\.parse\\s*\\(",
+              "\\bJSON\\.stringify\\s*\\(",
+              "\\bNumber\\s*\\(",
+              "\\bString\\s*\\(",
+              "\\bparseInt\\s*\\(",
+              "\\bparseFloat\\s*\\(",
+              "\\.toString\\s*\\(",
+              "\\bBoolean\\s*\\(",
+              "\\bas\\s+\\w+"
+            ]
+          },
+          "forcedPattern": "JSON.parse 必须包裹在 try-catch 中",
+          "severity": "error"
+        },
+        {
+          "id": "M20",
+          "name": "初始化",
+          "definition": "系统启动时的状态准备、配置加载、依赖注入",
+          "risk": "medium",
+          "patterns": {
+            "javascript": [
+              "\\b(init|initialize|bootstrap|setup|configure)\\s*\\(",
+              "\\b(getInstance|getConfig|loadConfig)\\s*\\(",
+              "\\bnew\\s+\\w+\\s*\\("
+            ],
+            "typescript": [
+              "\\b(init|initialize|bootstrap|setup|configure)\\s*\\(",
+              "\\b(getInstance|getConfig|loadConfig)\\s*\\(",
+              "\\bnew\\s+\\w+\\s*\\(",
+              "\\bconstructor\\s*\\("
+            ]
+          },
+          "forcedPattern": "若运行环境存在 UI 线程，初始化逻辑必须异步或分片执行",
+          "severity": "warning"
+        }
+      ]
+    },
+    {
+      "flow": "控制流",
+      "name": "Control Flow",
+      "description": "决定代码执行的逻辑路径与时序，是程序的骨架",
+      "actions": [
+        {
+          "id": "C6",
+          "name": "条件",
+          "definition": "逻辑分支判断，决定执行路径",
+          "risk": "medium",
+          "patterns": {
+            "javascript": [
+              "\\bif\\s*\\(",
+              "\\belse\\b",
+              "\\bswitch\\s*\\(",
+              "\\bcase\\s+",
+              "\\?\\s*[^:]+\\s*:"
+            ],
+            "typescript": [
+              "\\bif\\s*\\(",
+              "\\belse\\b",
+              "\\bswitch\\s*\\(",
+              "\\bcase\\s+",
+              "\\?\\s*[^:]+\\s*:"
+            ]
+          },
+          "forcedPattern": "if 分支有 return/throw 则 else 可省略；否则必须有 else 或 fallthrough 注释",
+          "severity": "warning"
+        },
+        {
+          "id": "C7",
+          "name": "循环",
+          "definition": "重复执行某段逻辑",
+          "risk": "medium",
+          "patterns": {
+            "javascript": [
+              "\\bfor\\s*\\(",
+              "\\bwhile\\s*\\(",
+              "\\.forEach\\s*\\(",
+              "\\.map\\s*\\(",
+              "\\.filter\\s*\\(",
+              "\\.reduce\\s*\\(",
+              "\\.some\\s*\\(",
+              "\\.every\\s*\\("
+            ],
+            "typescript": [
+              "\\bfor\\s*\\(",
+              "\\bwhile\\s*\\(",
+              "\\.forEach\\s*\\(",
+              "\\.map\\s*\\(",
+              "\\.filter\\s*\\(",
+              "\\.reduce\\s*\\(",
+              "\\.some\\s*\\(",
+              "\\.every\\s*\\("
+            ]
+          },
+          "forcedPattern": "异步循环必须用 for...of + await，禁止 forEach + async",
+          "severity": "error"
+        },
+        {
+          "id": "C8",
+          "name": "异步",
+          "definition": "非阻塞等待、并发控制与时序管理",
+          "risk": "medium",
+          "patterns": {
+            "javascript": [
+              "\\bawait\\s+",
+              "\\.then\\s*\\(",
+              "\\.catch\\s*\\(",
+              "\\bsetTimeout\\s*\\(",
+              "\\bsetInterval\\s*\\(",
+              "\\bPromise\\.",
+              "\\bnew\\s+Promise\\s*\\("
+            ],
+            "typescript": [
+              "\\bawait\\s+",
+              "\\.then\\s*\\(",
+              "\\.catch\\s*\\(",
+              "\\bsetTimeout\\s*\\(",
+              "\\bsetInterval\\s*\\(",
+              "\\bPromise\\.",
+              "\\bnew\\s+Promise\\s*\\("
+            ]
+          },
+          "forcedPattern": "所有 Promise 必须有 .catch() 或 try-catch",
+          "severity": "error"
+        }
+      ]
+    },
+    {
+      "flow": "函数流",
+      "name": "Function Flow",
+      "description": "模块间的交互与逻辑封装单元",
+      "actions": [
+        {
+          "id": "F9",
+          "name": "调用",
+          "definition": "执行函数或方法，默认假设为纯函数",
+          "risk": "low",
+          "patterns": {
+            "javascript": [
+              "\\b\\w+\\s*\\("
+            ],
+            "typescript": [
+              "\\b\\w+\\s*\\("
+            ]
+          },
+          "forcedPattern": "纯函数不得修改外部状态",
+          "severity": "info"
+        },
+        {
+          "id": "F10",
+          "name": "返回",
+          "definition": "退出当前函数作用域并返回值",
+          "risk": "low",
+          "patterns": {
+            "javascript": [
+              "\\breturn\\b"
+            ],
+            "typescript": [
+              "\\breturn\\b"
+            ]
+          },
+          "forcedPattern": "统一返回结构 { success, data, error }",
+          "severity": "warning"
+        },
+        {
+          "id": "F11",
+          "name": "抛出",
+          "definition": "主动引发错误中断正常流程",
+          "risk": "medium",
+          "patterns": {
+            "javascript": [
+              "\\bthrow\\s+"
+            ],
+            "typescript": [
+              "\\bthrow\\s+"
+            ]
+          },
+          "forcedPattern": "必须继承 Error 类",
+          "severity": "warning"
+        },
+        {
+          "id": "F12",
+          "name": "捕获",
+          "definition": "拦截异常并进行处理",
+          "risk": "medium",
+          "patterns": {
+            "javascript": [
+              "\\btry\\s*\\{",
+              "\\bcatch\\s*[\\(\\{]",
+              "\\bfinally\\s*\\{",
+              "\\.catch\\s*\\("
+            ],
+            "typescript": [
+              "\\btry\\s*\\{",
+              "\\bcatch\\s*[\\(\\{]",
+              "\\bfinally\\s*\\{",
+              "\\.catch\\s*\\("
+            ]
+          },
+          "forcedPattern": "catch 块中必须记录日志或重新抛出",
+          "severity": "warning"
+        },
+        {
+          "id": "F19",
+          "name": "副作用",
+          "definition": "非 IO 类的内部状态变更（修改全局变量、修改入参对象）",
+          "risk": "medium",
+          "patterns": {
+            "javascript": [
+              "\\bwindow\\.\\w+\\s*=",
+              "\\bglobal\\.\\w+\\s*=",
+              "\\bglobalThis\\.\\w+\\s*=",
+              "\\.push\\s*\\(",
+              "\\.splice\\s*\\(",
+              "\\.pop\\s*\\(",
+              "\\.shift\\s*\\(",
+              "\\.unshift\\s*\\("
+            ],
+            "typescript": [
+              "\\bwindow\\.\\w+\\s*=",
+              "\\bglobal\\.\\w+\\s*=",
+              "\\bglobalThis\\.\\w+\\s*=",
+              "\\.push\\s*\\(",
+              "\\.splice\\s*\\(",
+              "\\.pop\\s*\\(",
+              "\\.shift\\s*\\(",
+              "\\.unshift\\s*\\("
+            ]
+          },
+          "forcedPattern": "函数名以 mutate/set/update 为前缀，或在 JSDoc 标注 @sideEffects",
+          "severity": "warning"
+        }
+      ]
+    },
+    {
+      "flow": "交互流",
+      "name": "IO Flow",
+      "description": "与程序外部环境的通信，特征为高不确定性、高延迟、高风险",
+      "actions": [
+        {
+          "id": "I13",
+          "name": "渲染",
+          "definition": "输出数据到 UI 界面、控制台或日志",
+          "risk": "medium",
+          "patterns": {
+            "javascript": [
+              "\\binnerHTML\\s*=",
+              "\\.textContent\\s*=",
+              "\\.outerHTML\\s*=",
+              "\\bdocument\\.write\\s*\\(",
+              "\\bdocument\\.createElement\\s*\\(",
+              "\\bconsole\\.(log|warn|error|info|debug)\\s*\\(",
+              "\\.appendChild\\s*\\(",
+              "\\.insertAdjacentHTML\\s*\\("
+            ],
+            "typescript": [
+              "\\binnerHTML\\s*=",
+              "\\.textContent\\s*=",
+              "\\.outerHTML\\s*=",
+              "\\bdocument\\.write\\s*\\(",
+              "\\bdocument\\.createElement\\s*\\(",
+              "\\bconsole\\.(log|warn|error|info|debug)\\s*\\(",
+              "\\.appendChild\\s*\\(",
+              "\\.insertAdjacentHTML\\s*\\(",
+              "\\.render\\s*\\("
+            ]
+          },
+          "forcedPattern": "禁止直接使用 innerHTML 拼接用户数据",
+          "severity": "error"
+        },
+        {
+          "id": "I14",
+          "name": "用户输入",
+          "definition": "所有外部不可信源的数据接收",
+          "risk": "high",
+          "patterns": {
+            "javascript": [
+              "\\.value\\b(?!\\s*[=:]\\s*[{`'\"])",
+              "\\bURLSearchParams\\b",
+              "\\blocation\\.search\\b",
+              "\\.querySelector\\s*\\(['\"]",
+              "\\baddEventListener\\s*\\(\\s*['\"](submit|change|input|click)",
+              "\\bon\\w+\\s*=\\s*\\(",
+              "\\bFormData\\s*\\(",
+              "\\bfile\\w*\\s*\\.\\s*\\w+",
+              "\\bprocess\\.argv\\b"
+            ],
+            "typescript": [
+              "\\.value\\b(?!\\s*[=:]\\s*[{`'\"])",
+              "\\bURLSearchParams\\b",
+              "\\blocation\\.search\\b",
+              "\\.querySelector\\s*\\(['\"]",
+              "\\baddEventListener\\s*\\(\\s*['\"](submit|change|input|click)",
+              "\\bon\\w+\\s*=\\s*\\(",
+              "\\bFormData\\s*\\(",
+              "\\bfile\\w*\\s*\\.\\s*\\w+",
+              "\\bprocess\\.argv\\b"
+            ]
+          },
+          "forcedPattern": "必须调用 validate() 和 sanitize() 函数",
+          "severity": "error"
+        },
+        {
+          "id": "I15",
+          "name": "存储",
+          "definition": "本地持久化操作，不依赖网络",
+          "risk": "high",
+          "patterns": {
+            "javascript": [
+              "\\blocalStorage\\.(setItem|getItem|removeItem|clear)\\s*\\(",
+              "\\bsessionStorage\\.(setItem|getItem|removeItem|clear)\\s*\\(",
+              "\\bIndexedDB\\b",
+              "\\bindexedDB\\.open\\s*\\(",
+              "\\bfs\\.(writeFile|write|appendFile|mkdir|unlink|rmdir)\\s*\\(",
+              "\\.writeFileSync\\s*\\(",
+              "\\.appendFileSync\\s*\\(",
+              "\\bdocument\\.cookie\\s*=",
+              "\\bCookies\\.set\\s*\\("
+            ],
+            "typescript": [
+              "\\blocalStorage\\.(setItem|getItem|removeItem|clear)\\s*\\(",
+              "\\bsessionStorage\\.(setItem|getItem|removeItem|clear)\\s*\\(",
+              "\\bIndexedDB\\b",
+              "\\bindexedDB\\.open\\s*\\(",
+              "\\bfs\\.(writeFile|write|appendFile|mkdir|unlink|rmdir)\\s*\\(",
+              "\\.writeFileSync\\s*\\(",
+              "\\.appendFileSync\\s*\\(",
+              "\\bdocument\\.cookie\\s*=",
+              "\\bCookies\\.set\\s*\\("
+            ]
+          },
+          "forcedPattern": "写入前检查配额或包裹 try-catch",
+          "severity": "error"
+        },
+        {
+          "id": "I16",
+          "name": "通信",
+          "definition": "网络交互操作，依赖网络连接",
+          "risk": "high",
+          "patterns": {
+            "javascript": [
+              "\\bfetch\\s*\\(",
+              "\\baxios\\.",
+              "\\bXMLHttpRequest\\b",
+              "\\bnew\\s+WebSocket\\s*\\(",
+              "\\bEventSource\\s*\\(",
+              "\\bnavigator\\.sendBeacon\\s*\\("
+            ],
+            "typescript": [
+              "\\bfetch\\s*\\(",
+              "\\baxios\\.",
+              "\\bXMLHttpRequest\\b",
+              "\\bnew\\s+WebSocket\\s*\\(",
+              "\\bEventSource\\s*\\(",
+              "\\bnavigator\\.sendBeacon\\s*\\("
+            ]
+          },
+          "forcedPattern": "fetch 必须带 timeout 和 retry 配置项",
+          "severity": "error"
+        }
+      ]
+    },
+    {
+      "flow": "资源流",
+      "name": "Resource Flow",
+      "description": "管理程序生命周期内的资源分配与释放",
+      "actions": [
+        {
+          "id": "R17",
+          "name": "绑定",
+          "definition": "运行时建立事件监听、观察者模式或连接",
+          "risk": "medium",
+          "patterns": {
+            "javascript": [
+              "\\baddEventListener\\s*\\(",
+              "\\bon\\s*\\(",
+              "\\battachEvent\\s*\\(",
+              "\\bnew\\s+Observer\\s*\\(",
+              "\\bwatch\\s*\\(",
+              "\\bconnect\\s*\\(",
+              "\\bsubscribe\\s*\\(",
+              "\\bcreateConnection\\s*\\(",
+              "\\bsetInterval\\s*\\(",
+              "\\bsetTimeout\\s*\\("
+            ],
+            "typescript": [
+              "\\baddEventListener\\s*\\(",
+              "\\bon\\s*\\(",
+              "\\battachEvent\\s*\\(",
+              "\\bnew\\s+Observer\\s*\\(",
+              "\\bwatch\\s*\\(",
+              "\\bconnect\\s*\\(",
+              "\\bsubscribe\\s*\\(",
+              "\\bcreateConnection\\s*\\(",
+              "\\bsetInterval\\s*\\(",
+              "\\bsetTimeout\\s*\\("
+            ]
+          },
+          "forcedPattern": "addEventListener 必须配对 removeEventListener",
+          "severity": "error"
+        },
+        {
+          "id": "R18",
+          "name": "清理",
+          "definition": "释放资源、解除绑定、复位状态",
+          "risk": "medium",
+          "patterns": {
+            "javascript": [
+              "\\bremoveEventListener\\s*\\(",
+              "\\boff\\s*\\(",
+              "\\bdetachEvent\\s*\\(",
+              "\\.disconnect\\s*\\(",
+              "\\.unwatch\\s*\\(",
+              "\\.unsubscribe\\s*\\(",
+              "\\bclearTimeout\\s*\\(",
+              "\\bclearInterval\\s*\\(",
+              "\\.destroy\\s*\\(",
+              "\\.dispose\\s*\\(",
+              "\\.close\\s*\\(",
+              "\\.abort\\s*\\("
+            ],
+            "typescript": [
+              "\\bremoveEventListener\\s*\\(",
+              "\\boff\\s*\\(",
+              "\\bdetachEvent\\s*\\(",
+              "\\.disconnect\\s*\\(",
+              "\\.unwatch\\s*\\(",
+              "\\.unsubscribe\\s*\\(",
+              "\\bclearTimeout\\s*\\(",
+              "\\bclearInterval\\s*\\(",
+              "\\.destroy\\s*\\(",
+              "\\.dispose\\s*\\(",
+              "\\.close\\s*\\(",
+              "\\.abort\\s*\\("
+            ]
+          },
+          "forcedPattern": "必须在 finally 或 useEffect cleanup 中执行",
+          "severity": "warning"
+        }
+      ]
+    }
+  ],
+
+  "forcedPairings": [
+    {
+      "id": "I15-F12",
+      "source": "I15",
+      "sourceName": "存储",
+      "target": "F12",
+      "targetName": "捕获",
+      "description": "[I15 存储] 操作必须包裹在 try-catch 中，或在调用链中有 F12 捕获",
+      "severity": "error",
+      "checkMethod": "scope",
+      "appliesTo": ["javascript", "typescript"]
+    },
+    {
+      "id": "I16-F12",
+      "source": "I16",
+      "sourceName": "通信",
+      "target": "F12",
+      "targetName": "捕获",
+      "description": "[I16 通信] 必须带超时和重试机制，且有异常捕获",
+      "severity": "error",
+      "checkMethod": "scope_and_config",
+      "requiredConfig": ["timeout", "retry"],
+      "appliesTo": ["javascript", "typescript"]
+    },
+    {
+      "id": "I14-VALIDATE",
+      "source": "I14",
+      "sourceName": "用户输入",
+      "target": "F9",
+      "targetName": "调用",
+      "description": "[I14 用户输入] 必须调用 validate() 和 sanitize() 函数",
+      "severity": "error",
+      "checkMethod": "call_proximity",
+      "requiredCalls": ["validate", "sanitize"],
+      "scopeRange": 30,
+      "appliesTo": ["javascript", "typescript"]
+    },
+    {
+      "id": "R17-R18",
+      "source": "R17",
+      "sourceName": "绑定",
+      "target": "R18",
+      "targetName": "清理",
+      "description": "[R17 绑定] 必须在适当位置配对 [R18 清理]",
+      "severity": "error",
+      "checkMethod": "file",
+      "appliesTo": ["javascript", "typescript"]
+    },
+    {
+      "id": "M5-F12",
+      "source": "M5",
+      "sourceName": "转换",
+      "target": "F12",
+      "targetName": "捕获",
+      "description": "[M5 转换] 中 JSON.parse 必须包裹 try-catch",
+      "severity": "error",
+      "checkMethod": "scope",
+      "appliesTo": ["javascript", "typescript"]
+    },
+    {
+      "id": "C8-F12",
+      "source": "C8",
+      "sourceName": "异步",
+      "target": "F12",
+      "targetName": "捕获",
+      "description": "[C8 异步] 所有 Promise 必须有 .catch() 或 try-catch",
+      "severity": "error",
+      "checkMethod": "scope",
+      "appliesTo": ["javascript", "typescript"]
+    },
+    {
+      "id": "I13-XSS",
+      "source": "I13",
+      "sourceName": "渲染",
+      "target": "I14",
+      "targetName": "用户输入",
+      "description": "[I13 渲染] 禁止 innerHTML 直接拼接未清洗的用户数据",
+      "severity": "error",
+      "checkMethod": "combined",
+      "appliesTo": ["javascript", "typescript"]
+    },
+    {
+      "id": "C7-ASYNC",
+      "source": "C7",
+      "sourceName": "循环",
+      "target": "C8",
+      "targetName": "异步",
+      "description": "[C7 循环] 异步循环禁止 forEach + async 组合",
+      "severity": "error",
+      "checkMethod": "combined",
+      "appliesTo": ["javascript", "typescript"]
+    },
+    {
+      "id": "F12-NOTEMPTY",
+      "source": "F12",
+      "sourceName": "捕获",
+      "target": "F12",
+      "targetName": "捕获",
+      "description": "[F12 捕获] catch 块不能为空（必须记日志或重新抛出）",
+      "severity": "warning",
+      "checkMethod": "self",
+      "appliesTo": ["javascript", "typescript"]
+    },
+    {
+      "id": "F11-ERROR",
+      "source": "F11",
+      "sourceName": "抛出",
+      "target": "F11",
+      "targetName": "抛出",
+      "description": "[F11 抛出] 必须继承 Error 类",
+      "severity": "warning",
+      "checkMethod": "self",
+      "appliesTo": ["javascript", "typescript"]
+    }
+  ],
+
+  "strictnessLevels": {
+    "strict": {
+      "description": "全部强制配对检查",
+      "enabledPairings": ["I15-F12", "I16-F12", "I14-VALIDATE", "R17-R18", "M5-F12", "C8-F12", "I13-XSS", "C7-ASYNC", "F12-NOTEMPTY", "F11-ERROR"]
+    },
+    "moderate": {
+      "description": "仅 I流+R流 强制配对",
+      "enabledPairings": ["I15-F12", "I16-F12", "I14-VALIDATE", "R17-R18", "I13-XSS"]
+    },
+    "relaxed": {
+      "description": "仅 I14+I16 强制配对",
+      "enabledPairings": ["I16-F12", "I14-VALIDATE"]
+    }
+  }
+}
