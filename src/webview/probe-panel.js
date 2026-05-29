@@ -148,6 +148,22 @@ class ProbePanel {
     this._postMessage({ type: 'error', message });
   }
 
+  sendStreamStart() {
+    this._postMessage({ type: 'streamStart' });
+  }
+
+  sendStreamToken(token) {
+    this._postMessage({ type: 'streamToken', token });
+  }
+
+  sendStreamEnd() {
+    this._postMessage({ type: 'streamEnd' });
+  }
+
+  sendFileAttached(path, content) {
+    this._postMessage({ type: 'fileAttached', path, content });
+  }
+
   /**
    * [R18 清理] 销毁面板
    */
@@ -528,9 +544,11 @@ class ProbePanel {
 
   <!-- 输入区域 -->
   <div id="input-area" class="hidden">
+    <button id="attach" title="引用文件" style="background:transparent;border:1px solid var(--vscode-input-border);border-radius:6px;cursor:pointer;font-size:16px;padding:6px 10px;line-height:1">📎</button>
     <textarea id="input" placeholder="输入你的回答...（Enter 发送，Shift+Enter 换行）" rows="1"></textarea>
     <button id="send">发送</button>
   </div>
+  <div id="attached-files" style="display:none;padding:0 12px 8px;font-size:11px;color:var(--vscode-descriptionForeground)"></div>
 
   <!-- BDD 结果展示 -->
   <div id="bdd-result">
@@ -544,6 +562,7 @@ class ProbePanel {
       const vscode = acquireVsCodeApi();
       let chatStarted = false;
       let bddDone = false;
+      let attachedFiles = [];
 
       // ── DOM 引用 ──
       const $reqArea    = document.getElementById('requirement-area');
@@ -554,6 +573,8 @@ class ProbePanel {
       const $inputArea  = document.getElementById('input-area');
       const $input      = document.getElementById('input');
       const $sendBtn    = document.getElementById('send');
+      const $attachBtn  = document.getElementById('attach');
+      const $attached   = document.getElementById('attached-files');
       const $progress   = document.getElementById('progress');
       const $bddResult  = document.getElementById('bdd-result');
       const $bddMeta    = document.getElementById('bdd-meta');
@@ -587,10 +608,16 @@ class ProbePanel {
         $input.value = '';
         autoResize();
         showLoading(true);
-        vscode.postMessage({ type: 'userMessage', content: text });
+        vscode.postMessage({ type: 'userMessage', content: text, attachedFiles: attachedFiles });
+        attachedFiles = [];
+        $attached.style.display = 'none';
+        $attached.innerHTML = '';
       }
 
       $sendBtn.addEventListener('click', sendMessage);
+      $attachBtn.addEventListener('click', () => {
+        vscode.postMessage({ type: 'pickFile' });
+      });
       $input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
@@ -627,30 +654,49 @@ class ProbePanel {
         scrollToBottom();
       }
 
-      // ── 简易 Markdown 渲染 ──
+      // ── Markdown 渲染 ──
       function renderMarkdown(text) {
-        // 保护内联代码
-        var parts = [];
-        var last = 0;
-        text.replace(/\x60([^\x60]+)\x60/g, function(match, code, offset) {
-          parts.push(escapeHtml(text.slice(last, offset)));
-          parts.push('<code>' + escapeHtml(code) + '</code>');
-          last = offset + match.length;
+        var h = text;
+        // 代码块先处理（避免内部内容被后续规则影响）
+        h = h.replace(/\x60\x60\x60([\\s\\S]*?)\x60\x60\x60/g, function(m, code) {
+          return '<pre>' + escapeHtml(code.trim()) + '</pre>';
         });
-        if (last < text.length) {
-          parts.push(escapeHtml(text.slice(last)));
-        }
-        var html = parts.join('');
-
-        // 代码块 (反引号包裹)
-        html = html.replace(/\x60\x60\x60([\\s\\S]*?)\x60\x60\x60/g, function(m, code) {
-          return '<pre>' + code.trim() + '</pre>';
+        // 内联代码
+        h = h.replace(/\x60([^\x60]+)\x60/g, '<code>$1</code>');
+        // 标题
+        h = h.replace(/^#### (.+)$/gm, '<h4>$1</h4>');
+        h = h.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+        h = h.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+        h = h.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+        // 粗体/斜体
+        h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        h = h.replace(/\*(.+?)\*/g, '<em>$1</em>');
+        // 无序列表
+        h = h.replace(/^[\\-\\*] (.+)$/gm, '<li>$1</li>');
+        h = h.replace(/((?:<li>.*<\\/li>\\n?)+)/g, '<ul>$1</ul>');
+        // 有序列表
+        h = h.replace(/^\\d+\\. (.+)$/gm, '<li>$1</li>');
+        // 引用
+        h = h.replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>');
+        // 水平线
+        h = h.replace(/^---$/gm, '<hr>');
+        // 表格
+        h = h.replace(/^\\|(.+)\\|$/gm, function(line) {
+          if (/^\\|?[\\s\\-:]+\\|?$/.test(line)) return '';
+          var cells = line.split('|').filter(function(c) { return c.length > 0; });
+          return '<tr>' + cells.map(function(c) { return '<td>' + c.trim() + '</td>'; }).join('') + '</tr>';
         });
-
-        // 粗体 **text**
-        html = html.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
-
-        return html;
+        h = h.replace(/((?:<tr>.*?<\\/tr>\\n?)+)/g, function(m) {
+          var rows = m;
+          rows = rows.replace(/<tr>/, '<thead><tr>');
+          rows = rows.replace(/<td>/g, '<th>');
+          rows = rows.replace(/<\\/td>/g, '</th>');
+          rows = rows.replace(/<\\/tr>/, '</tr></thead><tbody>');
+          return '<table>' + rows + '</tbody></table>';
+        });
+        // 段落：双换行
+        h = '<p>' + h.replace(/\\n\\n/g, '</p><p>') + '</p>';
+        return h;
       }
 
       // ── HTML 转义 ──
@@ -752,11 +798,36 @@ class ProbePanel {
       // ═══════════════════════════════════════
       // 接收 extension → panel 消息
       // ═══════════════════════════════════════
+      var streamBuffer = '';
+      var streamDiv = null;
+
       window.addEventListener('message', function(event) {
         var msg = event.data;
         if (!msg || !msg.type) return;
 
         switch (msg.type) {
+          case 'streamStart':
+            showLoading(false);
+            streamBuffer = '';
+            streamDiv = addMessage('assistant', '');
+            break;
+
+          case 'streamToken':
+            streamBuffer += msg.token;
+            if (streamDiv) {
+              streamDiv.querySelector('.bubble').innerHTML = renderMarkdown(streamBuffer);
+              scrollToBottom();
+            }
+            break;
+
+          case 'streamEnd':
+            if (streamDiv) {
+              streamDiv.querySelector('.bubble').innerHTML = renderMarkdown(streamBuffer);
+            }
+            streamBuffer = '';
+            streamDiv = null;
+            break;
+
           case 'assistantMessage':
             showLoading(false);
             addMessage('assistant', msg.content);
@@ -776,6 +847,14 @@ class ProbePanel {
           case 'error':
             showLoading(false);
             addErrorMessage('❌ ' + msg.message);
+            break;
+
+          case 'fileAttached':
+            attachedFiles.push({ path: msg.path, content: msg.content });
+            $attached.style.display = 'block';
+            $attached.innerHTML = attachedFiles.map(function(f) {
+              return '<span style="background:var(--vscode-badge-background);padding:2px 6px;border-radius:3px;margin-right:4px">📄 ' + f.path.split('/').pop() + '</span>';
+            }).join('');
             break;
 
           case 'panelReady':

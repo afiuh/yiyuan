@@ -18,7 +18,7 @@ const { glmChat } = require('./glm');
  * @param {string} apiKey    — API Key（由调用方从 VS Code 配置中读取并传入）
  * @returns {Promise<string>} 模型回复文本
  */
-async function chat(messages, model, stream, apiKey) {
+async function chat(messages, model, stream, apiKey, onToken) {
   // [C6 条件] 校验 apiKey
   if (!apiKey) {
     throw new Error(`未配置 ${model} 的 API Key，请在 VS Code 设置中配置 yiyuan.${modelToConfigKey(model)}`);
@@ -33,13 +33,13 @@ async function chat(messages, model, stream, apiKey) {
   switch (model) {
     case 'deepseek-chat':
       // [I16 通信]
-      return await deepseekChat(messages, apiKey, stream);
+      return await deepseekChat(messages, apiKey, stream, onToken);
 
     case 'qwen-turbo':
-      return await qwenChat(messages, apiKey, stream);
+      return await qwenChat(messages, apiKey, stream, onToken);
 
     case 'glm-4':
-      return await glmChat(messages, apiKey, stream);
+      return await glmChat(messages, apiKey, stream, onToken);
 
     default:
       throw new Error(

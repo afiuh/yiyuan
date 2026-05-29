@@ -251,12 +251,28 @@ async function handleProbeMessage(msg) {
         await startProbeSession(msg.requirement);
         break;
       case 'userMessage':
-        await handleProbeUserMessage(msg.content);
+        await handleProbeUserMessage(msg.content, msg.attachedFiles);
+        break;
+      case 'pickFile':
+        handlePickFile();
         break;
     }
   } catch (err) {
     console.error('[意元] 探测失败:', err);
     probePanel.sendError(err.message);
+  }
+}
+
+async function handlePickFile() {
+  const files = await vscode.window.showOpenDialog({
+    canSelectMany: false,
+    openLabel: '引用文件',
+    filters: { '代码文件': ['js', 'ts', 'jsx', 'tsx', 'json', 'md'] }
+  });
+  if (files && files.length > 0) {
+    const filePath = files[0].fsPath;
+    const content = fs.readFileSync(filePath, 'utf-8');
+    probePanel.sendFileAttached(filePath, content);
   }
 }
 
@@ -289,11 +305,15 @@ async function startProbeSession(requirement) {
     metaActionDefs
   });
 
-  // [I16 通信] 调 LLM 第一轮
+  // [I16 通信] 调 LLM 第一轮（流式）
+  probePanel.sendStreamStart();
   const response = await chat([
     { role: 'system', content: systemPrompt },
     { role: 'user', content: requirement }
-  ], model, false, apiKey);
+  ], model, true, apiKey, (token) => {
+    probePanel.sendStreamToken(token);
+  });
+  probePanel.sendStreamEnd();
 
   // [M2 赋值] 记录 LLM 回复
   addMessage(probeSession, 'assistant', response);
@@ -306,16 +326,24 @@ async function startProbeSession(requirement) {
 /**
  * [F9 调用] 处理用户回复：记录 → 推进维度 → 调 LLM 或生成 BDD
  */
-async function handleProbeUserMessage(userMessage) {
+async function handleProbeUserMessage(userMessage, attachedFiles) {
   if (!probeSession) return;
+
+  // [M5 转换] 如果有引用文件，附加到用户消息中
+  let fullMessage = userMessage;
+  if (attachedFiles && attachedFiles.length > 0) {
+    for (const f of attachedFiles) {
+      fullMessage += `\n\n[引用文件: ${path.basename(f.path)}]\n\`\`\`\n${f.content.slice(0, 3000)}\n\`\`\``;
+    }
+  }
 
   const config = vscode.workspace.getConfiguration('yiyuan');
   const model = config.get('defaultModel', 'deepseek-chat');
   const apiKey = getApiKey(config, model);
 
   // [M2 赋值] 记录用户回复 + 推进维度
-  addMessage(probeSession, 'user', userMessage);
-  advanceDimension(probeSession, userMessage);
+  addMessage(probeSession, 'user', fullMessage);
+  advanceDimension(probeSession, fullMessage);
   probePanel.sendState(probeSession);
 
   // [C6 条件] 检查是否应该生成 BDD
@@ -340,7 +368,33 @@ async function handleProbeUserMessage(userMessage) {
     messages.push({ role: msg.role, content: msg.content });
   }
 
-  const response = await chat(messages, model, false, apiKey);
+  probePanel.sendStreamStart();
+  let response = await chat(messages, model, true, apiKey, (token) => {
+    probePanel.sendStreamToken(token);
+  });
+  probePanel.sendStreamEnd();
+
+  // [C6 条件] 代码层拦截——探测阶段 LLM 跳步到实现时，强制重新提问
+  if (!isReadyForBDD(probeSession)) {
+    const jumpSignals = [
+      /\x60\x60\x60/,           // 代码块
+      /\b(npm init|package\.json|git init|脚手架)\b/i,
+      /\b(先生成|先初始化|先实现|先创建文件)\b/i,
+      /\b(文件结构|项目结构|架构设计)\b/i,
+      /准备好.*开始/,
+      /建议先做/
+    ];
+    let jumpDetected = false;
+    for (const sig of jumpSignals) {
+      if (sig.test(response)) { jumpDetected = true; break; }
+    }
+    if (jumpDetected) {
+      messages.push({ role: 'assistant', content: response });
+      messages.push({ role: 'user', content: '你跳步了。探测阶段禁止输出代码、文件结构或实现方案。请回到当前维度，继续向用户提问。只问一个问题。' });
+      response = await chat(messages, model, false, apiKey);
+    }
+  }
+
   addMessage(probeSession, 'assistant', response);
 
   probePanel.sendState(probeSession);

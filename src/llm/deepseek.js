@@ -19,7 +19,7 @@ const DEEPSEEK_API_PATH = '/chat/completions';
  * @param {number} retries — 剩余重试次数
  * @returns {Promise<string>} 模型回复文本
  */
-async function deepseekChat(messages, apiKey, stream, retries = 2) {
+async function deepseekChat(messages, apiKey, stream, onToken, retries = 2) {
   // [M20 初始化] 请求体
   const body = JSON.stringify({
     model: 'deepseek-chat',
@@ -45,7 +45,7 @@ async function deepseekChat(messages, apiKey, stream, retries = 2) {
   // [I16 通信] 发送请求
   try {
     if (stream) {
-      return await streamRequest(options, body);
+      return await streamRequest(options, body, onToken);
     } else {
       return await normalRequest(options, body);
     }
@@ -55,7 +55,7 @@ async function deepseekChat(messages, apiKey, stream, retries = 2) {
       console.warn(`[意元] DeepSeek 请求失败，剩余重试 ${retries} 次: ${err.message}`);
       // [C8 异步] 等待后重试
       await sleep(1000);
-      return deepseekChat(messages, apiKey, stream, retries - 1);
+      return deepseekChat(messages, apiKey, stream, onToken, retries - 1);
     }
     // [F11 抛出] 重试耗尽
     throw new Error(`DeepSeek API 请求失败（已重试 2 次）: ${err.message}`);
@@ -111,7 +111,7 @@ function normalRequest(options, body) {
 /**
  * [I16 通信] SSE 流式请求
  */
-function streamRequest(options, body) {
+function streamRequest(options, body, onToken) {
   return new Promise((resolve, reject) => {
     const req = https.request(options, (res) => {
       // [C6 条件] 检查 HTTP 状态码
@@ -144,6 +144,7 @@ function streamRequest(options, body) {
               const delta = json.choices?.[0]?.delta?.content;
               if (delta) {
                 fullContent += delta;
+                if (onToken) onToken(delta);
               }
             } catch (_) {
               // 跳过无法解析的数据块
