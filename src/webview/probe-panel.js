@@ -637,13 +637,25 @@ class ProbePanel {
         const div = document.createElement('div');
         div.className = 'msg ' + role;
         const label = role === 'user' ? '👤 你' : '🤖 意元';
-        div.innerHTML =
-          '<div class="role-label">' + label + '</div>' +
-          '<div class="bubble">' + escapeHtml(renderMarkdown(content)) + '</div>';
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+        if (role === 'user') {
+          bubble.textContent = content;
+        } else {
+          bubble.innerHTML = renderMarkdown(content);
+        }
+        div.appendChild(createLabel(label));
+        div.appendChild(bubble);
         $messages.appendChild(div);
         scrollToBottom();
-
         return div;
+      }
+
+      function createLabel(text) {
+        const lbl = document.createElement('div');
+        lbl.className = 'role-label';
+        lbl.textContent = text;
+        return lbl;
       }
 
       function addErrorMessage(text) {
@@ -662,22 +674,22 @@ class ProbePanel {
           return '<pre>' + escapeHtml(code.trim()) + '</pre>';
         });
         // 内联代码
-        h = h.replace(/\x60([^\x60]+)\x60/g, '<code>$1</code>');
+        h = h.replace(/\x60([^\x60]+)\x60/g, function(m, c) { return '<code>' + escapeHtml(c) + '</code>'; });
         // 标题
-        h = h.replace(/^#### (.+)$/gm, '<h4>$1</h4>');
-        h = h.replace(/^### (.+)$/gm, '<h3>$1</h3>');
-        h = h.replace(/^## (.+)$/gm, '<h2>$1</h2>');
-        h = h.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+        h = h.replace(/^#### (.+)$/gm, function(m, c) { return '<h4>' + escapeHtml(c) + '</h4>'; });
+        h = h.replace(/^### (.+)$/gm, function(m, c) { return '<h3>' + escapeHtml(c) + '</h3>'; });
+        h = h.replace(/^## (.+)$/gm, function(m, c) { return '<h2>' + escapeHtml(c) + '</h2>'; });
+        h = h.replace(/^# (.+)$/gm, function(m, c) { return '<h1>' + escapeHtml(c) + '</h1>'; });
         // 粗体/斜体
         h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
         h = h.replace(/\*(.+?)\*/g, '<em>$1</em>');
         // 无序列表
-        h = h.replace(/^[\\-\\*] (.+)$/gm, '<li>$1</li>');
+        h = h.replace(/^[\\-\\*] (.+)$/gm, function(m, c) { return '<li>' + escapeHtml(c) + '</li>'; });
         h = h.replace(/((?:<li>.*<\\/li>\\n?)+)/g, '<ul>$1</ul>');
         // 有序列表
-        h = h.replace(/^\\d+\\. (.+)$/gm, '<li>$1</li>');
+        h = h.replace(/^\\d+\\. (.+)$/gm, function(m, c) { return '<li>' + escapeHtml(c) + '</li>'; });
         // 引用
-        h = h.replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>');
+        h = h.replace(/^> (.+)$/gm, function(m, c) { return '<blockquote>' + escapeHtml(c) + '</blockquote>'; });
         // 水平线
         h = h.replace(/^---$/gm, '<hr>');
         // 表格
