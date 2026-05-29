@@ -668,46 +668,45 @@ class ProbePanel {
 
       // ── Markdown 渲染 ──
       function renderMarkdown(text) {
-        var h = text;
-        // 代码块先处理（避免内部内容被后续规则影响）
-        h = h.replace(/\x60\x60\x60([\\s\\S]*?)\x60\x60\x60/g, function(m, code) {
-          return '<pre>' + escapeHtml(code.trim()) + '</pre>';
-        });
+        var h = escapeHtml(text);
+        // 代码块
+        h = h.replace(/\x60\x60\x60([\s\S]*?)\x60\x60\x60/g, function(m, code) { return '<pre>' + code.trim() + '</pre>'; });
         // 内联代码
-        h = h.replace(/\x60([^\x60]+)\x60/g, function(m, c) { return '<code>' + escapeHtml(c) + '</code>'; });
+        h = h.replace(/\x60([^\x60]+)\x60/g, '<code>$1</code>');
         // 标题
-        h = h.replace(/^#### (.+)$/gm, function(m, c) { return '<h4>' + escapeHtml(c) + '</h4>'; });
-        h = h.replace(/^### (.+)$/gm, function(m, c) { return '<h3>' + escapeHtml(c) + '</h3>'; });
-        h = h.replace(/^## (.+)$/gm, function(m, c) { return '<h2>' + escapeHtml(c) + '</h2>'; });
-        h = h.replace(/^# (.+)$/gm, function(m, c) { return '<h1>' + escapeHtml(c) + '</h1>'; });
+        h = h.replace(/^#### (.+)$/gm, '<h4>$1</h4>');
+        h = h.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+        h = h.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+        h = h.replace(/^# (.+)$/gm, '<h1>$1</h1>');
         // 粗体/斜体
         h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
         h = h.replace(/\*(.+?)\*/g, '<em>$1</em>');
         // 无序列表
-        h = h.replace(/^[\\-\\*] (.+)$/gm, function(m, c) { return '<li>' + escapeHtml(c) + '</li>'; });
-        h = h.replace(/((?:<li>.*<\\/li>\\n?)+)/g, '<ul>$1</ul>');
+        h = h.replace(/^[\-\*] (.+)$/gm, '<li>$1</li>');
+        h = h.replace(/((?:<li>[^\n]*\n?)+)/g, '<ul>$1</ul>');
         // 有序列表
-        h = h.replace(/^\\d+\\. (.+)$/gm, function(m, c) { return '<li>' + escapeHtml(c) + '</li>'; });
+        h = h.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
         // 引用
-        h = h.replace(/^> (.+)$/gm, function(m, c) { return '<blockquote>' + escapeHtml(c) + '</blockquote>'; });
+        h = h.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
         // 水平线
         h = h.replace(/^---$/gm, '<hr>');
-        // 表格
-        h = h.replace(/^\\|(.+)\\|$/gm, function(line) {
-          if (/^\\|?[\\s\\-:]+\\|?$/.test(line)) return '';
+        // 表格行
+        h = h.replace(/^\|(.+)\|$/gm, function(line) {
+          if (/^\|?[\s\-:]+\|?$/.test(line)) return '';
           var cells = line.split('|').filter(function(c) { return c.length > 0; });
           return '<tr>' + cells.map(function(c) { return '<td>' + c.trim() + '</td>'; }).join('') + '</tr>';
         });
-        h = h.replace(/((?:<tr>.*?<\\/tr>\\n?)+)/g, function(m) {
+        // 表格包裹
+        h = h.replace(/((?:<tr>.*?<\/tr>\n?)+)/g, function(m) {
           var rows = m;
           rows = rows.replace(/<tr>/, '<thead><tr>');
           rows = rows.replace(/<td>/g, '<th>');
-          rows = rows.replace(/<\\/td>/g, '</th>');
-          rows = rows.replace(/<\\/tr>/, '</tr></thead><tbody>');
+          rows = rows.replace(/<\/td>/g, '</th>');
+          rows = rows.replace(/<\/tr>/, '</tr></thead><tbody>');
           return '<table>' + rows + '</tbody></table>';
         });
-        // 段落：双换行
-        h = '<p>' + h.replace(/\\n\\n/g, '</p><p>') + '</p>';
+        // 段落
+        h = '<p>' + h.replace(/\n\n/g, '</p><p>') + '</p>';
         return h;
       }
 
@@ -763,48 +762,28 @@ class ProbePanel {
 
       // ── 完整 Markdown 渲染（BDD 用） ──
       function renderFullMarkdown(text) {
-        var html = escapeHtml(text);
-
-        // 代码块
-        html = html.replace(/\x60\x60\x60([\\s\\S]*?)\x60\x60\x60/g, '<pre>$1</pre>');
-        // 内联代码
-        html = html.replace(/\x60([^\x60]+)\x60/g, '<code>$1</code>');
-        // 标题
-        html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
-        html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
-        html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-        // 粗体
-        html = html.replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>');
-        // 表格
-        html = html.replace(/^\\|(.+)\\|$/gm, function(line) {
-          var cells = line.split('|').filter(function(c) { return c.trim(); });
-          var isHeader = /^[-:\\s]+$/.test(cells[0] || '');
-          if (isHeader) return '';
-          var tag = line.indexOf('|---') > -1 || line.indexOf('| --') > 0 ? '' :
-                    (line.replace(/^\\|(.+)\\|$/, '$1').indexOf('---') >= 0 ? '' :
-                    '<tr>' + cells.map(function(c) {
-                      var prevIsHeader = false;
-                      return (prevIsHeader ? '<th>' : '<td>') + c.trim() + (prevIsHeader ? '</th>' : '</td>');
-                    }).join('') + '</tr>');
-          return tag;
+        var h = escapeHtml(text);
+        h = h.replace(/\x60\x60\x60([\s\S]*?)\x60\x60\x60/g, '<pre>$1</pre>');
+        h = h.replace(/\x60([^\x60]+)\x60/g, '<code>$1</code>');
+        h = h.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+        h = h.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+        h = h.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+        h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        h = h.replace(/^\|(.+)\|$/gm, function(line) {
+          if (/^\|?[\s\-:]+\|?$/.test(line)) return '';
+          var cells = line.split('|').filter(function(c) { return c.length > 0; });
+          return '<tr>' + cells.map(function(c) { return '<td>' + c.trim() + '</td>'; }).join('') + '</tr>';
         });
-        // 处理表格（简化：将连续的 <tr> 包在 <table> 里）
-        html = html.replace(/(<tr>[\\s\\S]*?<\\/tr>)\\s*(?=<tr>|[^<]|$)/g, function(m) {
+        h = h.replace(/((?:<tr>.*?<\/tr>\n?)+)/g, function(m) {
           var rows = m;
-          // 第一行做表头
           rows = rows.replace(/<tr>/, '<thead><tr>');
           rows = rows.replace(/<td>/g, '<th>');
-          rows = rows.replace(/<\\/td>/g, '</th>');
-          rows = rows.replace(/<\\/tr>/, '</tr></thead><tbody>');
-          rows = rows.replace(/<tr>/g, '<tr>'); // 后续行保持 td
+          rows = rows.replace(/<\/td>/g, '</th>');
+          rows = rows.replace(/<\/tr>/, '</tr></thead><tbody>');
           return '<table>' + rows + '</tbody></table>';
         });
-
-        // 保持换行
-        html = html.replace(/\\n\\n/g, '</p><p>');
-        html = '<p>' + html + '</p>';
-
-        return html;
+        h = '<p>' + h.replace(/\n\n/g, '</p><p>') + '</p>';
+        return h;
       }
 
       // ═══════════════════════════════════════
