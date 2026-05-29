@@ -634,17 +634,17 @@ class ProbePanel {
 
       // ── 添加消息 ──
       function addMessage(role, content) {
-        const div = document.createElement('div');
+        var div = document.createElement('div');
         div.className = 'msg ' + role;
-        const label = role === 'user' ? '👤 你' : '🤖 意元';
-        const bubble = document.createElement('div');
+        var labelText = role === 'user' ? '👤 你' : '🤖 意元';
+        var bubble = document.createElement('div');
         bubble.className = 'bubble';
         if (role === 'user') {
           bubble.textContent = content;
         } else {
           bubble.innerHTML = renderMarkdown(content);
         }
-        div.appendChild(createLabel(label));
+        div.appendChild(createLabel(labelText));
         div.appendChild(bubble);
         $messages.appendChild(div);
         scrollToBottom();
